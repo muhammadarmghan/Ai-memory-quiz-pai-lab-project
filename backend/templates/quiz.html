@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}Quiz - AI Memory Booster{% endblock %}
+
+{% block content %}
+<div class="quiz-container">
+    <div class="page-header fade-in">
+        <h1>❓ Quiz Mode</h1>
+        <p id="quizSubtitle">Answer questions and boost your memory with spaced repetition</p>
+    </div>
+
+    <!-- Quiz Controls -->
+    <div id="quizControls" class="card fade-in" style="margin-bottom:1.5rem;">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+            <select id="topicSelect" class="form-input" style="max-width:250px;">
+                <option value="">All Topics</option>
+            </select>
+            <select id="limitSelect" class="form-input" style="max-width:140px;">
+                <option value="5">5 Questions</option>
+                <option value="10" selected>10 Questions</option>
+                <option value="20">20 Questions</option>
+            </select>
+            <button class="btn btn-primary" onclick="startQuiz()">🚀 Start Quiz</button>
+            <button class="btn btn-secondary" onclick="loadReviewQuestions()">🔄 Review Due</button>
+        </div>
+    </div>
+
+    <!-- Questions Area -->
+    <div id="questionsArea">
+        <div class="empty-state">
+            <div class="icon">🎯</div>
+            <h3>Ready to learn?</h3>
+            <p style="color:var(--text-muted);">Click "Start Quiz" to begin or "Review Due" for spaced repetition</p>
+        </div>
+    </div>
+
+    <!-- Quiz Summary (hidden initially) -->
+    <div id="quizSummary" style="display:none;"></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let questions = [];
+let currentIndex = 0;
+let results = [];
+
+async function loadTopicOptions() {
+    try {
+        const topics = await apiCall('/api/topics');
+        const select = document.getElementById('topicSelect');
+        topics.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.id;
+            opt.textContent = t.name;
+            select.appendChild(opt);
+        });
+    } catch(e) {}
+
+    // Check URL param
+    const params = new URLSearchParams(window.location.search);
+    const tid = params.get('topic_id');
+    if (tid) {
+        document.getElementById('topicSelect').value = tid;
+        startQuiz();
+    }
+}
+
+async function startQuiz() {
+
+    const topicId = document.getElementById('topicSelect').value;
+    const limit = document.getElementById('limitSelect').value;
+    let endpoint = `/api/quiz/questions?limit=${limit}`;
+    if (topicId) endpoint += `&topic_id=${topicId}`;
+
+    try {
+        questions = await apiCall(endpoint);
+        if (!questions || questions.length === 0) {
+            document.getElementById('questionsArea').innerHTML = `
+            <div class="empty-state"><div class="icon">📭</div><h3>No questions found</h3>
+            <p style="color:var(--text-muted);">Try selecting a different topic or load data first</p></div>`;
+            return;
+        }
+        currentIndex = 0;
+        results = [];
+        showQuestion();
+    } catch(e) {
+        showToast(e.error || 'Failed to load questions', 'error');
+    }
+}
+
+async function loadReviewQuestions() {
+    try {
+        const data = await apiCall('/api/quiz/questions/review');
+        if (!data.questions || data.questions.length === 0) {
+            showToast('No questions due for review! 🎉', 'success');
+            return;
+        }
+        questions = data.questions;
+        currentIndex = 0;
+        results = [];
+        document.getElementById('quizSubtitle').textContent = `${data.total_due} questions due for review`;
+        showQuestion();
+    } catch(e) {
+        showToast(e.error || 'Failed to load review', 'error');
+    }
+}
+
+function showQuestion() {
+    const area = document.getElementById('questionsArea');
+    const q = questions[currentIndex];
+    document.getElementById('quizSummary').style.display = 'none';
+
+    let choicesHtml = '';
+    let choiceLabels = [];
+    let choiceTexts = [];
+
+    // Parse choices - handle multiple formats
+    if (q.choices) {
+        if (q.choices.label && q.choices.text) {
+            choiceLabels = Array.isArray(q.choices.label) ? q.choices.label : [q.choices.label];
+            choiceTexts = Array.isArray(q.choices.text) ? q.choices.text : [q.choices.text];
+        } else if (Array.isArray(q.choices)) {
+            q.choices.forEach((c, i) => {
+                choiceLabels.push(String.fromCharCode(65 + i));
+                choiceTexts.push(typeof c === 'string' ? c : c.text || c);
+            });
+        }
+    }
+
+    choiceLabels.forEach((label, i) => {
+        choicesHtml += `
+        <button class="choice-btn" data-answer="${label}" onclick="selectAnswer(this, '${label}')">
+            <span class="choice-label">${label}</span>
+            <span>${choiceTexts[i] || label}</span>
+        </button>`;
+    });
+
+    area.innerHTML = `
+    <div class="question-card fade-in">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+            <span class="question-number">📋 Question ${currentIndex + 1} of ${questions.length}</span>
+            <span style="font-size:0.8rem;color:var(--text-muted);">ID: ${q.external_id || q.id}</span>
+        </div>
+        <div class="progress-bar" style="margin-bottom:1.5rem;">
+            <div class="progress-fill" style="width:${((currentIndex + 1) / questions.length) * 100}%"></div>
+        </div>
+        <p class="question-text">${q.question_text}</p>
+        <div class="choices-list" id="choicesList">
+            ${choicesHtml}
+        </div>
+        <div class="feedback-box" id="feedbackBox"></div>
+        <div style="margin-top:1.5rem;display:flex;justify-content:flex-end;gap:8px;">
+            <button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()" style="display:none;">Submit Answer</button>
+            <button class="btn btn-secondary" id="nextBtn" onclick="nextQuestion()" style="display:none;">Next →</button>
+        </div>
+    </div>`;
+
+    // Show facts if available
+    if (q.fact1 && q.fact1 !== 'nan' && q.fact1 !== '') {
+        const factsHtml = `
+        <div class="card fade-in" style="margin-top:1rem;border-left:3px solid var(--accent-info);">
+            <div style="font-weight:600;font-size:0.85rem;margin-bottom:8px;color:var(--accent-info);">💡 Study Facts</div>
+            ${q.fact1 && q.fact1 !== 'nan' ? `<p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:4px;">${q.fact1}</p>` : ''}
+            ${q.fact2 && q.fact2 !== 'nan' ? `<p style="font-size:0.85rem;color:var(--text-secondary);">${q.fact2}</p>` : ''}
+        </div>`;
+        area.innerHTML += factsHtml;
+    }
+}
+
+let selectedAnswer = null;
+
+function selectAnswer(btn, answer) {
+    document.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedAnswer = answer;
+    document.getElementById('submitBtn').style.display = 'inline-flex';
+}
+
+async function submitAnswer() {
+    if (!selectedAnswer) return;
+
+    const q = questions[currentIndex];
+    document.getElementById('submitBtn').style.display = 'none';
+
+    try {
+        const result = await apiCall('/api/quiz/answer', {
+            method: 'POST',
+            body: JSON.stringify({ question_id: q.id, user_answer: selectedAnswer })
+        });
+
+        results.push({ question: q, answer: selectedAnswer, result });
+
+        // Show feedback
+        const feedback = document.getElementById('feedbackBox');
+        if (result.is_correct) {
+            feedback.className = 'feedback-box correct-feedback show';
+            feedback.innerHTML = `✅ <div><strong>Correct!</strong><br><span style="font-size:0.8rem;">Next review in ${result.interval_days} day(s)</span></div>`;
+        } else {
+            feedback.className = 'feedback-box incorrect-feedback show';
+            feedback.innerHTML = `❌ <div><strong>Incorrect.</strong> Correct answer: <strong>${result.correct_answer}</strong><br><span style="font-size:0.8rem;">${result.explanation || ''}</span></div>`;
+        }
+
+        // Highlight buttons
+        document.querySelectorAll('.choice-btn').forEach(btn => {
+            btn.style.pointerEvents = 'none';
+            const ans = btn.getAttribute('data-answer');
+            if (ans === result.correct_answer) btn.classList.add('correct');
+            else if (ans === selectedAnswer && !result.is_correct) btn.classList.add('incorrect');
+        });
+
+        document.getElementById('nextBtn').style.display = 'inline-flex';
+        if (currentIndex >= questions.length - 1) {
+            document.getElementById('nextBtn').textContent = '📊 View Results';
+        }
+    } catch(e) {
+        showToast(e.error || 'Failed to submit answer', 'error');
+        document.getElementById('submitBtn').style.display = 'inline-flex';
+    }
+}
+
+function nextQuestion() {
+    selectedAnswer = null;
+    currentIndex++;
+    if (currentIndex >= questions.length) {
+        showSummary();
+    } else {
+        showQuestion();
+    }
+}
+
+function showSummary() {
+    document.getElementById('questionsArea').innerHTML = '';
+    const correct = results.filter(r => r.result.is_correct).length;
+    const total = results.length;
+    const accuracy = total > 0 ? ((correct / total) * 100).toFixed(1) : 0;
+
+    let emoji = '🌟';
+    let message = 'Outstanding!';
+    if (accuracy < 50) { emoji = '💪'; message = 'Keep practicing!'; }
+    else if (accuracy < 80) { emoji = '👍'; message = 'Good job!'; }
+
+    document.getElementById('quizSummary').style.display = 'block';
+    document.getElementById('quizSummary').innerHTML = `
+    <div class="card fade-in" style="text-align:center;padding:3rem;">
+        <div style="font-size:4rem;margin-bottom:1rem;">${emoji}</div>
+        <h2 style="font-size:1.5rem;margin-bottom:0.5rem;">${message}</h2>
+        <p style="color:var(--text-muted);margin-bottom:2rem;">You completed the quiz</p>
+        <div style="display:flex;justify-content:center;gap:2rem;margin-bottom:2rem;">
+            <div>
+                <div style="font-size:2rem;font-weight:800;color:var(--accent-primary-light);">${correct}/${total}</div>
+                <div style="font-size:0.8rem;color:var(--text-muted);">Correct</div>
+            </div>
+            <div>
+                <div style="font-size:2rem;font-weight:800;color:var(--accent-success);">${accuracy}%</div>
+                <div style="font-size:0.8rem;color:var(--text-muted);">Accuracy</div>
+            </div>
+        </div>
+        <div style="display:flex;justify-content:center;gap:8px;">
+            <button class="btn btn-primary" onclick="startQuiz()">🔄 Try Again</button>
+            <a href="/" class="btn btn-secondary">📊 Dashboard</a>
+        </div>
+    </div>`;
+}
+
+// Init
+loadTopicOptions();
+</script>
+{% endblock %}

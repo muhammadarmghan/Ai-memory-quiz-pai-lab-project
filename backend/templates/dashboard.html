@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - AI Memory Booster{% endblock %}
+
+{% block content %}
+<div class="page-header fade-in">
+    <h1>📊 Dashboard</h1>
+    <p>Welcome to AI Memory Booster — Your intelligent spaced repetition learning platform</p>
+</div>
+
+<!-- Stats Grid -->
+<div class="stats-grid">
+    <div class="stat-card fade-in">
+        <div class="stat-icon primary">📝</div>
+        <div class="stat-content">
+            <h3 id="statTotalAttempts">—</h3>
+            <p>Total Attempts</p>
+        </div>
+    </div>
+    <div class="stat-card fade-in">
+        <div class="stat-icon success">✅</div>
+        <div class="stat-content">
+            <h3 id="statCorrect">—</h3>
+            <p>Correct Answers</p>
+        </div>
+    </div>
+    <div class="stat-card fade-in">
+        <div class="stat-icon warning">🎯</div>
+        <div class="stat-content">
+            <h3 id="statAccuracy">—</h3>
+            <p>Overall Accuracy</p>
+        </div>
+    </div>
+    <div class="stat-card fade-in">
+        <div class="stat-icon info">🔄</div>
+        <div class="stat-content">
+            <h3 id="statReview">—</h3>
+            <p>Due for Review</p>
+        </div>
+    </div>
+</div>
+
+<!-- Content Grid -->
+<div class="content-grid">
+    <!-- Accuracy Ring -->
+    <div class="card fade-in">
+        <div class="card-header">
+            <span class="card-title"><span class="icon">📈</span> Accuracy Overview</span>
+            <span class="badge badge-success" id="accuracyBadge">—</span>
+        </div>
+        <div class="circular-progress" id="accuracyRing">
+            <svg width="120" height="120" viewBox="0 0 120 120">
+                <defs>
+                    <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#6366f1"/>
+                        <stop offset="100%" style="stop-color:#8b5cf6"/>
+                    </linearGradient>
+                </defs>
+                <circle class="circle-bg" cx="60" cy="60" r="52"/>
+                <circle class="circle-fill" cx="60" cy="60" r="52"
+                    stroke-dasharray="326.73"
+                    stroke-dashoffset="326.73"
+                    id="progressCircle"/>
+            </svg>
+            <div class="progress-text">
+                <div class="progress-value" id="accuracyValue">0%</div>
+                <div class="progress-label">Accuracy</div>
+            </div>
+        </div>
+        <div style="text-align:center; color:var(--text-muted); font-size:0.85rem;">
+            Based on your quiz performance
+        </div>
+    </div>
+
+    <!-- Topics Progress -->
+    <div class="card fade-in">
+        <div class="card-header">
+            <span class="card-title"><span class="icon">📚</span> Topics Progress</span>
+            <span class="badge badge-primary" id="topicCount">0 topics</span>
+        </div>
+        <div id="topicsProgress">
+            <div class="empty-state">
+                <div class="icon">📚</div>
+                <h3>No quiz data yet</h3>
+                <p style="color:var(--text-muted);font-size:0.85rem;">Take some quizzes to see topic progress</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function loadDashboard() {
+    try {
+
+        const progress = await apiCall('/api/quiz/progress');
+
+        document.getElementById('statTotalAttempts').textContent = progress.total_attempts;
+        document.getElementById('statCorrect').textContent = progress.correct_answers;
+        document.getElementById('statAccuracy').textContent = progress.overall_accuracy.toFixed(1) + '%';
+        document.getElementById('statReview').textContent = progress.due_for_review;
+
+        // Update accuracy ring
+        const accuracy = progress.overall_accuracy || 0;
+        const circumference = 326.73;
+        const offset = circumference - (accuracy / 100) * circumference;
+        document.getElementById('progressCircle').style.strokeDashoffset = offset;
+        document.getElementById('accuracyValue').textContent = accuracy.toFixed(1) + '%';
+
+        const badgeEl = document.getElementById('accuracyBadge');
+        if (accuracy >= 80) { badgeEl.textContent = 'Excellent'; badgeEl.className = 'badge badge-success'; }
+        else if (accuracy >= 50) { badgeEl.textContent = 'Good'; badgeEl.className = 'badge badge-warning'; }
+        else { badgeEl.textContent = 'Needs Work'; badgeEl.className = 'badge badge-danger'; }
+
+        // Topics progress
+        if (progress.topics && progress.topics.length > 0) {
+            document.getElementById('topicCount').textContent = progress.topics.length + ' topics';
+            let html = '';
+            progress.topics.forEach(t => {
+                const acc = t.accuracy.toFixed(1);
+                html += `
+                <div style="margin-bottom:12px;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                        <span style="font-weight:600;font-size:0.9rem;">${t.topic_name}</span>
+                        <span style="font-size:0.8rem;color:var(--text-muted);">${t.correct}/${t.total_questions} (${acc}%)</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill${parseFloat(acc) >= 70 ? ' success' : ''}" style="width:${acc}%"></div>
+                    </div>
+                </div>`;
+            });
+            document.getElementById('topicsProgress').innerHTML = html;
+        }
+    } catch (err) {
+        console.log('Dashboard load:', err);
+    }
+}
+
+loadDashboard();
+</script>
+{% endblock %}

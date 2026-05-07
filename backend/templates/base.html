@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI Memory Booster - Intelligent Spaced Repetition Learning Platform">
+    <title>{% block title %}AI Memory Booster{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <!-- Background Orbs -->
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+    <div class="bg-orb bg-orb-3"></div>
+
+    <div class="app-container">
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="navbar-inner">
+                <a href="/" class="navbar-brand">
+                    <div class="brand-icon">🧠</div>
+                    <span>AI Memory Booster</span>
+                </a>
+                <ul class="navbar-nav" id="mainNav">
+                    <li><a href="/" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" id="nav-dashboard">📊 Dashboard</a></li>
+                    <li><a href="/topics" class="nav-link {% if active_page == 'topics' %}active{% endif %}" id="nav-topics">📚 Topics</a></li>
+                    <li><a href="/smart-paste" class="nav-link {% if active_page == 'smart-paste' %}active{% endif %}" id="nav-smart-paste">✨ Smart Paste</a></li>
+                    <li><a href="/quiz" class="nav-link {% if active_page == 'quiz' %}active{% endif %}" id="nav-quiz">❓ Quiz</a></li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <span class="status-dot online"></span>
+            AI Memory Booster v1.0.0 &middot; Flask Backend &middot; Spaced Repetition Engine &middot; <span id="currentYear"></span>
+        </footer>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        // --- Global Config ---
+        const API_BASE = '';
+
+        // --- Toast System ---
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => { 
+                toast.style.opacity = '0'; 
+                setTimeout(() => toast.remove(), 300); 
+            }, 3500);
+        }
+
+        // --- API Helper ---
+        async function apiCall(endpoint, options = {}) {
+            const headers = { 'Content-Type': 'application/json', ...options.headers };
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+                const data = await response.json();
+                if (!response.ok) throw { status: response.status, ...data };
+                return data;
+            } catch (err) {
+                console.error('API Error:', err);
+                throw err;
+            }
+        }
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

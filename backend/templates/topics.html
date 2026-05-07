@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Topics - AI Memory Booster{% endblock %}
+
+{% block content %}
+<div class="page-header fade-in">
+    <h1>📚 Study Topics</h1>
+    <p>Browse available topics and start quizzing</p>
+</div>
+
+<div id="topicsContainer">
+    <div style="display:flex;justify-content:center;padding:4rem;">
+        <div class="spinner"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function loadTopics() {
+    const container = document.getElementById('topicsContainer');
+    try {
+
+        const topics = await apiCall('/api/topics');
+
+        if (!topics || topics.length === 0) {
+            container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📭</div>
+                <h3>No topics available</h3>
+                <p style="color:var(--text-muted);">Load data using the data loader script</p>
+            </div>`;
+            return;
+        }
+
+        let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem;">';
+        for (const topic of topics) {
+            // Fetch detail for question count
+            let qCount = '—';
+            try {
+                const detail = await apiCall(`/api/topics/${topic.id}`);
+                qCount = detail.question_count || 0;
+            } catch(e) {}
+
+            const colors = ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444'];
+            const color = colors[topic.id % colors.length];
+
+            html += `
+            <div class="card fade-in" style="cursor:pointer;" onclick="window.location='/quiz?topic_id=${topic.id}'">
+                <div style="display:flex;align-items:start;gap:14px;">
+                    <div style="width:48px;height:48px;border-radius:var(--radius-md);background:${color}22;color:${color};display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0;">📖</div>
+                    <div style="flex:1;">
+                        <h3 style="font-size:1.05rem;font-weight:700;margin-bottom:4px;">${topic.name}</h3>
+                        <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px;">${topic.description || 'Study topic'}</p>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <span class="badge badge-primary">${qCount} Questions</span>
+                            <span class="badge badge-info">Spaced Repetition</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top:1rem;display:flex;justify-content:flex-end;">
+                    <span class="btn btn-secondary" style="font-size:0.8rem;padding:6px 16px;">Start Quiz →</span>
+                </div>
+            </div>`;
+        }
+        html += '</div>';
+        container.innerHTML = html;
+
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state"><h3>Error loading topics</h3><p>${err.error || err.message || 'Unknown error'}</p></div>`;
+    }
+}
+
+loadTopics();
+</script>
+{% endblock %}
